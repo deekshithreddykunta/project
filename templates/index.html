@@ -5917,6 +5917,39 @@ const stateToDestinations = {
   "Uttarakhand":"uttarakhand",
   "Himachal Pradesh": "himachal pradesh"
 };
+const seasonAttractionsByState = {
+  "Tamil Nadu": {
+    summer: ["Ooty", "Kodaikanal", "Yercaud"],
+    monsoon: ["Courtallam"],
+    winter: ["Rameswaram", "Madurai"],
+    spring: ["Yelagiri"]
+  },
+  "Kerala": {
+    summer: ["Munnar", "Wayanad"],
+    monsoon: ["Athirapally"],
+    winter: ["Kovalam", "Varkala"],
+    spring: ["Thekkady"]
+  },
+  "Karnataka": {
+    summer: ["Coorg", "Chikmagalur"],
+    monsoon: ["Jog Falls"],
+    winter: ["Hampi", "Mysuru"],
+    spring: ["Nandi Hills"]
+  },
+  "Rajasthan": {
+    summer: [],
+    monsoon: ["Udaipur"],
+    winter: ["Jaipur", "Jaisalmer"],
+    spring: ["Mount Abu"]
+  },
+  "Maharashtra": {
+    summer: ["Mahabaleshwar"],
+    monsoon: ["Lonavala"],
+    winter: ["Ajanta", "Ellora"],
+    spring: ["Panchgani"]
+  }
+};
+
 let currentSearchTerm = '';
 function showTransportForAttraction(attraction) {
   const title = document.getElementById('transport-attraction-title');
@@ -6168,63 +6201,41 @@ function openAttractionByName(name) {
 }
 // Filter by season (age unused for now) and show ONLY top attractions
 function filterBySeasonAndAge() {
-  const ageVal = document.getElementById('user-age').value;
-  const selectedSeason = document.querySelector('input[name="season"]:checked')?.value;
-  if (!selectedSeason) {
-    alert('Please select a season.');
-    return;
-  }
-  const matchingAttractions = [];
-  Object.values(destinationsData).forEach(dest => {
-    if (!dest || !dest.season || !dest.attractions) return;
-    const seasons = Array.isArray(dest.season)
-      ? dest.season.map(s => String(s).toLowerCase())
-      : String(dest.season).toLowerCase().split(',').map(s => s.trim());
-    if (!seasons.includes(selectedSeason.toLowerCase())) return;
-    Object.values(dest.attractions).forEach(at => matchingAttractions.push(at));
-  });
-  console.log('Filtered attractions:', matchingAttractions.length);
-  if (!matchingAttractions.length) {
-    alert('No attractions found for this season.');
+  const season = document.querySelector('input[name="season"]:checked')?.value;
+  if (!season) {
+    alert("Please select a season");
     return;
   }
 
-  navigateTo('destination-detail');
-  const detailSection = document.getElementById('destination-detail');
-  if (detailSection) detailSection.style.display = 'block';
-  // Hide big image
-  const destImg = document.getElementById('dest-image');
-  if (destImg) {
-    destImg.removeAttribute('src');
-    destImg.style.display = 'none';
-  }
-  // Header text
-  document.getElementById('dest-title').innerText =
-    `Top attractions for ${selectedSeason}`;
-  document.getElementById('dest-description').innerText =
-    'Filtered top attractions across India.';
-  // Remove Quick Facts completely
-  const factsHeading = document.querySelector('#destination-detail h3:nth-of-type(2)');
-  const factsList = document.getElementById('dest-facts');
-  if (factsHeading) factsHeading.style.display = 'none';
-  if (factsList) {
-    factsList.innerHTML = '';
-    factsList.style.display = 'none';
-  }
-  // Render ONLY top attractions
-  const list = document.getElementById('dest-attractions');
-  list.innerHTML = '';
-  matchingAttractions.forEach(at => {
-    const li = document.createElement('li');
-    li.innerHTML = `
-      <img src="${at.image}" alt="${at.title}">
-      <h4>${at.title}</h4>
-      <p>${at.location}</p>
-    `;
-    li.addEventListener('click', () => openAttractionModal(at));
-    list.appendChild(li);
+  const container = document.getElementById("destinations-list");
+  container.innerHTML = "";
+
+  Object.keys(seasonAttractionsByState).forEach(state => {
+    const attractions = seasonAttractionsByState[state][season];
+
+    if (!attractions || attractions.length === 0) return;
+
+    // 🔹 State heading
+    const heading = document.createElement("h3");
+    heading.textContent = state;
+    heading.style.marginTop = "20px";
+    container.appendChild(heading);
+
+    // 🔹 Show only attractions of THIS state for THIS season
+    attractions.forEach(place => {
+      const card = document.createElement("div");
+      card.className = "card";
+      card.innerHTML = `
+        <h4>${place}</h4>
+        <p>Best season: ${season}</p>
+      `;
+      container.appendChild(card);
+    });
   });
+
+  navigateTo("destinations");
 }
+
 function navigateToDestination(stateId) {
   const state = destinationsData[stateId];
   if (state) {
