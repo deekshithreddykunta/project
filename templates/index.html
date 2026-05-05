@@ -1,0 +1,408 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Real-Time Object Detection</title>
+
+  <style>
+    /* ===== Desktop/base (same as your original) ===== */
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      background: linear-gradient(135deg, #f0f4f8 0%, #d9e2ec 100%);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      padding: 20px;
+      color: #34495e;
+    }
+
+    h1 {
+      font-size: 2.8em;
+      color: #1abc9c;
+      text-shadow: 0 3px 6px rgba(0,0,0,0.1);
+      margin-bottom: 25px;
+      text-align: center;
+    }
+
+    .controls { margin-bottom: 25px; }
+
+    button {
+      padding: 14px 32px;
+      border: none;
+      border-radius: 30px;
+      cursor: pointer;
+      font-size: 18px;
+      font-weight: 600;
+      color: white;
+      margin: 0 12px;
+      transition: all 0.3s ease;
+      box-shadow: 0 6px 18px rgba(26, 188, 156, 0.4);
+      background: linear-gradient(135deg, #1abc9c, #16a085);
+      touch-action: manipulation;
+    }
+
+    button:hover:not(:disabled) {
+      transform: translateY(-3px);
+      box-shadow: 0 10px 25px rgba(26, 188, 156, 0.6);
+    }
+
+    button:disabled {
+      background: #bdc3c7;
+      cursor: not-allowed;
+      box-shadow: none;
+    }
+
+    .detection-area {
+      position: relative;
+      width: 900px;
+      height: 500px;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+    }
+
+    .video-container {
+      position: absolute;
+      left: 0;
+      top: 10px;
+      width: 640px;
+      height: 480px;
+      border-radius: 20px;
+      overflow: hidden;
+      box-shadow: 0 25px 50px rgba(0,0,0,0.15);
+      background: linear-gradient(145deg, #ffffff, #e0f7f4);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    video {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: none;
+      border-radius: 20px;
+      transition: all 0.4s ease-in-out;
+    }
+
+    .camera-icon {
+      font-size: 120px;
+      color: #bdc3c7;
+      display: block;
+      transition: transform 0.3s ease, color 0.3s ease;
+      user-select: none;
+    }
+
+    .camera-icon:hover { transform: scale(1.1); color: #95a5a6; }
+
+    .counts-panel {
+      position: absolute;
+      right: 0;
+      top: 50%;
+      transform: translateY(-50%);
+      width: 220px;
+      min-height: 200px;
+      padding: 25px;
+      background: rgba(255,255,255,0.97);
+      border-radius: 25px;
+      border: 3px solid rgba(26, 188, 156, 0.3);
+      box-shadow: 0 12px 40px rgba(0,0,0,0.12);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      font-size: 18px;
+      font-weight: 600;
+      color: #16a085;
+      text-align: center;
+    }
+
+    .counts-list div { margin: 6px 0; }
+    .no-detection { color: #95a5a6 !important; font-style: italic; }
+    .detecting { color: #3498db; font-style: italic; }
+
+    canvas { border-radius: 20px; pointer-events: none; }
+
+    /* Flip button hidden on desktop; visible on mobile only */
+    #flipBtn { display: none; }
+
+    /* ===== Mobile ONLY changes (desktop unchanged) ===== */
+    @media (max-width: 767px) {
+      body { display: block; min-height: auto; padding: 15px; }
+
+      .controls {
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+        align-items: center;
+      }
+
+      button { margin: 0; min-width: 250px; }
+      #flipBtn { display: inline-block; }
+
+      .detection-area {
+        width: 100%;
+        height: auto;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 16px;
+      }
+
+      .video-container {
+        position: relative;
+        left: auto;
+        top: auto;
+        width: 100%;
+        height: auto;
+        max-width: 640px;
+        aspect-ratio: 4 / 3;
+      }
+
+      .counts-panel {
+        position: relative;
+        right: auto;
+        top: auto;
+        transform: none;
+        width: 100%;
+        max-width: 320px;
+        min-height: 120px;
+        padding: 18px;
+      }
+    }
+  </style>
+</head>
+
+<body>
+  <h1>REAL-TIME OBJECT DETECTION</h1>
+
+  <div class="controls">
+    <button id="startBtn" onclick="startDetection()">Start Detection</button>
+    <button id="flipBtn" onclick="flipCamera()" disabled>Flip Camera</button>
+    <button id="stopBtn" onclick="stopDetection()" disabled>Stop Detection</button>
+  </div>
+
+  <div class="detection-area">
+    <div class="video-container">
+      <video id="video" autoplay muted playsinline></video>
+      <div class="camera-icon" id="cameraIcon">📷</div>
+    </div>
+
+    <div class="counts-panel no-detection" id="counts">
+      <div class="counts-list">Click Start<br>to begin</div>
+    </div>
+  </div>
+
+  <script>
+    const video = document.getElementById('video');
+    const cameraIcon = document.getElementById('cameraIcon');
+    const countsEl = document.getElementById('counts');
+    const startBtn = document.getElementById('startBtn');
+    const flipBtn  = document.getElementById('flipBtn');
+    const stopBtn  = document.getElementById('stopBtn');
+
+    let stream = null;
+    let intervalId = null;
+
+    let canvasOverlay = null;
+    let ctxOverlay = null;
+    let inFlight = false;
+
+    // default: back camera on mobiles
+    let currentFacingMode = 'environment'; // 'environment' | 'user'
+
+    function ensureOverlay() {
+      const container = document.querySelector('.video-container');
+
+      if (!canvasOverlay) {
+        canvasOverlay = document.createElement('canvas');
+        canvasOverlay.style.position = 'absolute';
+        canvasOverlay.style.top = '0';
+        canvasOverlay.style.left = '0';
+        canvasOverlay.style.pointerEvents = 'none';
+        canvasOverlay.style.borderRadius = '20px';
+        container.appendChild(canvasOverlay);
+        ctxOverlay = canvasOverlay.getContext('2d');
+      }
+
+      const rect = container.getBoundingClientRect();
+      canvasOverlay.width = Math.round(rect.width);
+      canvasOverlay.height = Math.round(rect.height);
+    }
+
+    function showCameraIcon() {
+      video.style.display = 'none';
+      cameraIcon.style.display = 'block';
+      if (ctxOverlay && canvasOverlay) ctxOverlay.clearRect(0, 0, canvasOverlay.width, canvasOverlay.height);
+
+      countsEl.innerHTML = '<div class="counts-list">Ready to<br>detect</div>';
+      countsEl.classList.add('no-detection');
+      countsEl.classList.remove('detecting');
+    }
+
+    function hideCameraIcon() {
+      cameraIcon.style.display = 'none';
+    }
+
+    function stopStream() {
+      if (stream) stream.getTracks().forEach(t => t.stop());
+      stream = null;
+      video.srcObject = null;
+    }
+
+    async function startStreamWithFacingMode() {
+      stopStream();
+
+      // Use facingMode (ideal) for best compatibility across devices/browsers. 
+      stream = await navigator.mediaDevices.getUserMedia({
+        video: { width: 640, height: 480, facingMode: { ideal: currentFacingMode } },
+        audio: false
+      });
+
+      video.srcObject = stream;
+      await new Promise(r => (video.onloadedmetadata = r));
+      await video.play();
+    }
+
+    async function startDetection() {
+      try {
+        await startStreamWithFacingMode();
+
+        hideCameraIcon();
+        video.style.display = 'block';
+
+        ensureOverlay();
+        window.addEventListener('resize', ensureOverlay, { passive: true });
+
+        startBtn.disabled = true;
+        stopBtn.disabled = false;
+        flipBtn.disabled = false;
+
+        countsEl.innerHTML = '<div class="counts-list"><br>Detecting...</div>';
+        countsEl.classList.add('detecting');
+        countsEl.classList.remove('no-detection');
+
+        intervalId = setInterval(sendFrameForDetection, 300);
+      } catch (e) {
+        alert('Camera access denied. Please allow camera permission.');
+        startBtn.disabled = false;
+      }
+    }
+
+    async function flipCamera() {
+      currentFacingMode = (currentFacingMode === 'environment') ? 'user' : 'environment';
+
+      // If not running, just keep mode for next start
+      if (!intervalId) return;
+
+      // Stop & restart stream before switching cameras
+      inFlight = false;
+      try {
+        await startStreamWithFacingMode();
+        ensureOverlay();
+      } catch (e) {
+        alert('Unable to flip camera on this device/browser.');
+      }
+    }
+
+    function stopDetection() {
+      if (intervalId) clearInterval(intervalId);
+      intervalId = null;
+      inFlight = false;
+
+      stopStream();
+
+      startBtn.disabled = false;
+      stopBtn.disabled = true;
+      flipBtn.disabled = true;
+
+      showCameraIcon();
+    }
+
+    async function sendFrameForDetection() {
+      if (!video.videoWidth || video.paused || inFlight) return;
+      if (!ctxOverlay || !canvasOverlay) ensureOverlay();
+
+      inFlight = true;
+
+      const tempCanvas = document.createElement('canvas');
+      const tempCtx = tempCanvas.getContext('2d');
+      tempCanvas.width = video.videoWidth;
+      tempCanvas.height = video.videoHeight;
+      tempCtx.drawImage(video, 0, 0);
+
+      // Note: no 0.xx quality parameter
+      tempCanvas.toBlob(async (blob) => {
+        try {
+          const formData = new FormData();
+          formData.append('image', blob, 'frame.jpg');
+
+          const res = await fetch('/detect', { method: 'POST', body: formData });
+          if (!res.ok) throw new Error(`HTTP ${res.status}`);
+          const data = await res.json();
+
+          // counts panel
+          if (data.counts && Object.keys(data.counts).length > 0) {
+            const countItems = Object.entries(data.counts)
+              .map(([cls, cnt]) => `<div><strong>${cls}: ${cnt}</strong></div>`)
+              .join('');
+            countsEl.innerHTML = `<div class="counts-list">${countItems}</div>`;
+            countsEl.classList.remove('no-detection', 'detecting');
+          } else {
+            countsEl.innerHTML = '<div class="counts-list">No objects</div>';
+            countsEl.classList.add('no-detection');
+          }
+
+          // draw boxes + LABEL ONLY (no confidence)
+          ctxOverlay.clearRect(0, 0, canvasOverlay.width, canvasOverlay.height);
+
+          const sx = canvasOverlay.width / 640;
+          const sy = canvasOverlay.height / 480;
+
+          if (data.objects?.length > 0) {
+            data.objects.forEach(obj => {
+              const [x1, y1, x2, y2] = obj.box;
+
+              const X = x1 * sx;
+              const Y = y1 * sy;
+              const W = (x2 - x1) * sx;
+              const H = (y2 - y1) * sy;
+
+              ctxOverlay.strokeStyle = '#00ff41';
+              ctxOverlay.lineWidth = 3;
+              ctxOverlay.shadowColor = 'rgba(0,255,65,0.5)';
+              ctxOverlay.shadowBlur = 8;
+              ctxOverlay.strokeRect(X, Y, W, H);
+
+              const text = obj.label; // ✅ only label
+              ctxOverlay.font = 'bold 16px Segoe UI';
+              const tw = ctxOverlay.measureText(text).width;
+
+              const labelY = Math.max(0, Y - 24);
+              ctxOverlay.fillStyle = 'rgba(0,255,65,0.9)';
+              ctxOverlay.fillRect(X, labelY, tw + 10, 22);
+
+              ctxOverlay.fillStyle = '#000';
+              ctxOverlay.textAlign = 'left';
+              ctxOverlay.textBaseline = 'middle';
+              ctxOverlay.fillText(text, X + 5, labelY + 11);
+            });
+          }
+        } catch (e) {
+          countsEl.innerHTML = '<div class="counts-list">Error</div>';
+          countsEl.classList.add('no-detection');
+        } finally {
+          inFlight = false;
+        }
+      }, 'image/jpeg');
+    }
+
+    showCameraIcon();
+  </script>
+</body>
+</html>
